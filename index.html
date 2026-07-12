@@ -491,7 +491,8 @@ function flap(){
 
 // ── HOLD-TO-LOSE (hold the game area for 5 seconds to make the bird crash)
 let holdTimer=null;
-function startHold(){
+function startHold(e){
+  if(e.target&&e.target.closest&&e.target.closest('button'))return;
   clearTimeout(holdTimer);
   holdTimer=setTimeout(()=>{if(gst==='playing')startFalling();},5000);
 }
@@ -524,7 +525,10 @@ wrapEl.addEventListener('touchcancel',clearHold);
 
 document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();flap();}});
 document.getElementById('wrap').addEventListener('click',flap);
-document.getElementById('wrap').addEventListener('touchstart',e=>{e.preventDefault();flap();},{passive:false});
+document.getElementById('wrap').addEventListener('touchstart',e=>{
+  if(e.target.closest('button'))return;
+  e.preventDefault();flap();
+},{passive:false});
 
 document.getElementById('rb').addEventListener('click',e=>{
   e.stopPropagation();cancelAnimationFrame(aid);
