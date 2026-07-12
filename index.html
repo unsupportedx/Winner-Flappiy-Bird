@@ -80,8 +80,8 @@
       <div class="tapbtn">👆 Tap to Start</div>
     </div>
     <div id="gs" class="scr hidden">
-      <div class="trop">🏆</div>
-      <h2>Great Flight! 🎉</h2>
+      <div class="trop" id="gsTrop">🏆</div>
+      <h2 id="gsTitle">Great Flight! 🎉</h2>
       <div class="sbox"><div class="lb">Score</div><div class="vl" id="fs">0</div></div>
       <button class="rbtn" id="rb">🔄 Play Again</button>
     </div>
@@ -114,6 +114,7 @@ function sScore(){tone(740,.09,'triangle',.18,0,1100);tone(1100,.13,'triangle',.
 function sNear(){tone(300,.09,'square',.05,0,220);}
 function sGround(){tone(150,.12,'sawtooth',.08,0,90);}
 function sWin(){tone(523,.1,'triangle',.16);tone(659,.1,'triangle',.16,.09);tone(784,.16,'triangle',.18,.18);}
+function sCrash(){tone(220,.18,'sawtooth',.2,0,60);tone(140,.22,'square',.14,.06,40);}
 
 const C=document.getElementById('c'), X=C.getContext('2d');
 const W=620, H=750, GY=H-95;
@@ -184,7 +185,7 @@ function dGround(){
   const gg=X.createLinearGradient(0,GY-18,0,GY+12);gg.addColorStop(0,'#65dc65');gg.addColorStop(.5,'#3ebb3e');gg.addColorStop(1,'#1e721e');
   X.fillStyle=gg;X.fillRect(0,GY-9,W,24);
   X.fillStyle='rgba(255,255,255,.10)';X.fillRect(0,GY-9,W,5);
-  if(gst==='playing') gox=(gox-PS*.75+W*3)%(W+45);
+  if(gst==='playing'||gst==='falling') gox=(gox-PS*.75+W*3)%(W+45);
   for(let i=-45;i<W+55;i+=22){
     const gx=((i+gox)%(W+55))-18;
     X.strokeStyle='rgba(28,95,28,.72)';X.lineWidth=1.7;
@@ -406,27 +407,37 @@ function nearMiss(){
 
 // ── UPDATE
 function update(){
-  if(gst!=='playing')return; fr++;
-  autoFlap();
+  if(gst!=='playing'&&gst!=='falling')return;
+  fr++;
+  if(gst==='playing')autoFlap();
   bird.vy+=bird.grav; bird.vy=Math.min(bird.vy,bird.mf); bird.y+=bird.vy;
   bird.wp+=.3*bird.wd; if(Math.abs(bird.wp)>.72)bird.wd*=-1;
   bird.tp+=.11; if(bird.rf>0)bird.rf-=.06;
-  cheat();
+  if(gst==='playing'){
+    cheat();
+  }else if(gst==='falling'){
+    if(bird.y+R*.72>=GY-16){bird.y=GY-R*.72-16;finalizeLoss();return;}
+  }
   bird.trail.push({x:bird.x,y:bird.y,a:.44}); if(bird.trail.length>16)bird.trail.shift();
   bird.trail.forEach(t=>t.a*=.77);
-  if(fr%PE===0)pipe();
-  pipes.forEach(p=>{
-    p.x-=PS;
-    if(!p.pd&&p.x+PW<bird.x){
-      p.pd=true;sc++;document.getElementById('score').textContent=sc;
-      burst(bird.x,bird.y,'#FFE566',15);sScore();
-      const s=document.getElementById('score');s.style.transform='translateX(-50%) scale(1.45)';
-      setTimeout(()=>s.style.transform='translateX(-50%) scale(1)',145);
-      if(sc%5===0)pop('🌟 '+sc+' Points!');
-    }
-  });
-  pipes=pipes.filter(p=>p.x>-PW-35);
-  nearMiss();
+  if(gst==='playing'){
+    if(fr%PE===0)pipe();
+    pipes.forEach(p=>{
+      p.x-=PS;
+      if(!p.pd&&p.x+PW<bird.x){
+        p.pd=true;sc++;document.getElementById('score').textContent=sc;
+        burst(bird.x,bird.y,'#FFE566',15);sScore();
+        const s=document.getElementById('score');s.style.transform='translateX(-50%) scale(1.45)';
+        setTimeout(()=>s.style.transform='translateX(-50%) scale(1)',145);
+        if(sc%5===0)pop('🌟 '+sc+' Points!');
+      }
+    });
+    pipes=pipes.filter(p=>p.x>-PW-35);
+    nearMiss();
+  }else{
+    pipes.forEach(p=>{p.x-=PS;});
+    pipes=pipes.filter(p=>p.x>-PW-35);
+  }
   CLOUDS.forEach(c=>{c.x-=c.sp;if(c.x<-135){c.x=W+75;c.y=55+Math.random()*145;}});
 }
 
@@ -478,6 +489,39 @@ function flap(){
   if(gst==='playing'){bird.vy=bird.fp;bird.rf=1;burst(bird.x-22,bird.y+7,'#ffe566',6);sFlap();nextAutoFlap=Date.now()+260+Math.random()*300;}
 }
 
+// ── HOLD-TO-LOSE (hold the game area for 5 seconds to make the bird crash)
+let holdTimer=null;
+function startHold(){
+  clearTimeout(holdTimer);
+  holdTimer=setTimeout(()=>{if(gst==='playing')startFalling();},5000);
+}
+function clearHold(){clearTimeout(holdTimer);}
+
+function startFalling(){
+  gst='falling';
+  burst(bird.x,bird.y,'#ff5544',14);
+  sCrash();
+}
+
+function finalizeLoss(){
+  gst='over';
+  cancelAnimationFrame(aid);
+  burst(bird.x,bird.y,'#ff8844',20);
+  document.getElementById('fs').textContent=sc;
+  document.getElementById('gsTrop').textContent='💥';
+  document.getElementById('gsTitle').textContent='Game Over';
+  document.getElementById('gs').classList.remove('hidden');
+  document.getElementById('score').style.display='none';
+}
+
+const wrapEl=document.getElementById('wrap');
+wrapEl.addEventListener('mousedown',startHold);
+wrapEl.addEventListener('touchstart',startHold,{passive:true});
+wrapEl.addEventListener('mouseup',clearHold);
+wrapEl.addEventListener('mouseleave',clearHold);
+wrapEl.addEventListener('touchend',clearHold);
+wrapEl.addEventListener('touchcancel',clearHold);
+
 document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();flap();}});
 document.getElementById('wrap').addEventListener('click',flap);
 document.getElementById('wrap').addEventListener('touchstart',e=>{e.preventDefault();flap();},{passive:false});
@@ -485,6 +529,8 @@ document.getElementById('wrap').addEventListener('touchstart',e=>{e.preventDefau
 document.getElementById('rb').addEventListener('click',e=>{
   e.stopPropagation();cancelAnimationFrame(aid);
   document.getElementById('gs').classList.add('hidden');
+  document.getElementById('gsTrop').textContent='🏆';
+  document.getElementById('gsTitle').textContent='Great Flight! 🎉';
   gst='idle';sc=0;fr=0;pipes=[];parts=[];rb();
   document.getElementById('ss').classList.remove('hidden');
   document.getElementById('score').style.display='none';
