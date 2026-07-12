@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,6 +54,17 @@
   @keyframes tpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
   @keyframes tapulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.97)}}
   @keyframes trb{0%{transform:scale(0) rotate(-25deg)}70%{transform:scale(1.25) rotate(6deg)}100%{transform:scale(1) rotate(0)}}
+  #fsBtn{
+    position:absolute;top:24px;left:24px;z-index:20;pointer-events:all;cursor:pointer;
+    background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.28);border-radius:16px;
+    padding:12px 16px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(10px);
+    color:#fff;font-family:'Nunito',sans-serif;font-weight:800;font-size:14px;
+    box-shadow:0 6px 24px rgba(0,0,0,.35);transition:opacity .6s ease,transform .6s ease;
+    opacity:1;
+  }
+  #fsBtn:hover{background:rgba(255,255,255,.2);transform:translateY(-2px);}
+  #fsBtn.fade-out{opacity:0;transform:translateY(8px);}
+  #fsBtn svg{width:18px;height:18px;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -65,22 +76,48 @@
       <div class="badge">✨ PRO MODE</div>
       <canvas id="bp" width="160" height="120" style="margin-bottom:26px;filter:drop-shadow(0 12px 38px rgba(255,200,0,.55))"></canvas>
       <h1>FLAPPY<br>WINNER</h1>
-      <p class="sub">Kaybetmek imkânsız! &nbsp;·&nbsp; You can't lose!</p>
-      <div class="tapbtn">👆 Tıkla / Tap to Start</div>
+      <p class="sub">You can't lose!</p>
+      <div class="tapbtn">👆 Tap to Start</div>
     </div>
     <div id="gs" class="scr hidden">
       <div class="trop">🏆</div>
-      <h2>Harika Uçuş! 🎉</h2>
-      <div class="sbox"><div class="lb">Skor / Score</div><div class="vl" id="fs">0</div></div>
-      <button class="rbtn" id="rb">🔄 Tekrar Oyna</button>
+      <h2>Great Flight! 🎉</h2>
+      <div class="sbox"><div class="lb">Score</div><div class="vl" id="fs">0</div></div>
+      <button class="rbtn" id="rb">🔄 Play Again</button>
     </div>
-    <div id="wpop">⭐ Süper! ⭐</div>
+    <div id="wpop">⭐ Awesome! ⭐</div>
+    <div id="fsBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+      Fullscreen
+    </div>
   </div>
 </div>
 <script>
+// ── SOUND EFFECTS (synthesized, no downloads needed)
+let actx=null;
+function ac(){if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume();return actx;}
+function tone(freq,dur,type,vol,startDelay=0,slideTo=null){
+  try{
+    const a=ac(),t0=a.currentTime+startDelay;
+    const osc=a.createOscillator(),g=a.createGain();
+    osc.type=type;osc.frequency.setValueAtTime(freq,t0);
+    if(slideTo)osc.frequency.exponentialRampToValueAtTime(slideTo,t0+dur);
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(vol,t0+.012);
+    g.gain.exponentialRampToValueAtTime(.001,t0+dur);
+    osc.connect(g);g.connect(a.destination);
+    osc.start(t0);osc.stop(t0+dur+.02);
+  }catch(e){}
+}
+function sFlap(){tone(430,.11,'sine',.16,0,620);}
+function sScore(){tone(740,.09,'triangle',.18,0,1100);tone(1100,.13,'triangle',.14,.06,1500);}
+function sNear(){tone(300,.09,'square',.05,0,220);}
+function sGround(){tone(150,.12,'sawtooth',.08,0,90);}
+function sWin(){tone(523,.1,'triangle',.16);tone(659,.1,'triangle',.16,.09);tone(784,.16,'triangle',.18,.18);}
+
 const C=document.getElementById('c'), X=C.getContext('2d');
 const W=620, H=750, GY=H-95;
-const PG=200, PW=76, PS=1.85, PE=160;
+const PG=200, PW=76, PS=9.25, PE=32;
 const R=30; // bird radius
 
 let gst='idle', sc=0, fr=0, aid;
@@ -328,8 +365,21 @@ function cheat(){
       if(bird.y+R*.72>p.th+PG-24&&bird.vy>0)bird.vy=-Math.abs(bird.vy)*.32;
     }
   });
-  if(bird.y+R*.72>GY-16){bird.y=GY-R*.72-16;bird.vy=-5.2;burst(bird.x,bird.y+22,'#88ff88',6);}
+  if(bird.y+R*.72>GY-16){bird.y=GY-R*.72-16;bird.vy=-5.2;burst(bird.x,bird.y+22,'#88ff88',6);sGround();}
   if(bird.y-R*.72<16){bird.y=R*.72+16;bird.vy=4;}
+}
+
+// ── AUTO-PLAY MOTION (bird always looks like someone is actively flying it)
+let nextAutoFlap=0;
+function autoFlap(){
+  const now=Date.now();
+  if(now>nextAutoFlap){
+    bird.vy=bird.fp*(0.55+Math.random()*0.5);
+    bird.rf=1;
+    burst(bird.x-22,bird.y+7,'#ffe566',5);
+    sFlap();
+    nextAutoFlap=now+380+Math.random()*420;
+  }
 }
 
 // ── WIN POP
@@ -340,13 +390,14 @@ function pop(msg){const e=document.getElementById('wpop');e.textContent=msg;e.cl
 function nearMiss(){
   pipes.forEach(p=>{
     const bR=bird.x+R*.62,bL=bird.x-R*.62,bT=bird.y-R*.62,bB=bird.y+R*.62;
-    if(bR>p.x&&bL<p.x+PW){if(Math.abs(bT-p.th)<30||Math.abs(bB-(p.th+PG))<30)pop('💨 Çok Yakın!');}
+    if(bR>p.x&&bL<p.x+PW){if(Math.abs(bT-p.th)<30||Math.abs(bB-(p.th+PG))<30){pop('💨 Too Close!');sNear();}}
   });
 }
 
 // ── UPDATE
 function update(){
   if(gst!=='playing')return; fr++;
+  autoFlap();
   bird.vy+=bird.grav; bird.vy=Math.min(bird.vy,bird.mf); bird.y+=bird.vy;
   bird.wp+=.22*bird.wd; if(Math.abs(bird.wp)>.72)bird.wd*=-1;
   bird.tp+=.08; if(bird.rf>0)bird.rf-=.06;
@@ -358,10 +409,10 @@ function update(){
     p.x-=PS;
     if(!p.pd&&p.x+PW<bird.x){
       p.pd=true;sc++;document.getElementById('score').textContent=sc;
-      burst(bird.x,bird.y,'#FFE566',15);
+      burst(bird.x,bird.y,'#FFE566',15);sScore();
       const s=document.getElementById('score');s.style.transform='translateX(-50%) scale(1.45)';
       setTimeout(()=>s.style.transform='translateX(-50%) scale(1)',145);
-      if(sc%5===0)pop('🌟 '+sc+' Puan!');
+      if(sc%5===0)pop('🌟 '+sc+' Points!');
     }
   });
   pipes=pipes.filter(p=>p.x>-PW-35);
@@ -398,9 +449,23 @@ function renderPreview(){
 function idleLoop(){bird.y=H/2+Math.sin(Date.now()*.0018)*24;bird.vy=Math.sin(Date.now()*.0018)*2;render();aid=requestAnimationFrame(idleLoop);}
 
 // ── INPUT
+function requestFS(){
+  const el=document.getElementById('wrap');
+  const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  const tryFallback=()=>{
+    const de=document.documentElement;
+    const req2=de.requestFullscreen||de.webkitRequestFullscreen||de.mozRequestFullScreen||de.msRequestFullscreen;
+    if(req2){const r=req2.call(de);if(r&&r.catch)r.catch(err=>console.warn('Fullscreen blocked:',err));}
+  };
+  if(req){
+    const result=req.call(el);
+    if(result&&result.catch)result.catch(err=>{console.warn('Fullscreen blocked on #wrap, trying full page:',err);tryFallback();});
+  }else{tryFallback();}
+}
+
 function flap(){
-  if(gst==='idle'){cancelAnimationFrame(aid);startGame();return;}
-  if(gst==='playing'){bird.vy=bird.fp;bird.rf=1;burst(bird.x-22,bird.y+7,'#ffe566',6);}
+  if(gst==='idle'){cancelAnimationFrame(aid);requestFS();startGame();return;}
+  if(gst==='playing'){bird.vy=bird.fp;bird.rf=1;burst(bird.x-22,bird.y+7,'#ffe566',6);sFlap();nextAutoFlap=Date.now()+380+Math.random()*420;}
 }
 
 document.addEventListener('keydown',e=>{if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();flap();}});
@@ -426,6 +491,17 @@ function startGame(){
   function loop(){update();render();aid=requestAnimationFrame(loop);}
   loop();
 }
+
+// ── FULLSCREEN BUTTON (shown once at start for 2 seconds)
+const fsBtn=document.getElementById('fsBtn');
+fsBtn.addEventListener('click',e=>{
+  e.stopPropagation();
+  requestFS();
+});
+setTimeout(()=>{
+  fsBtn.classList.add('fade-out');
+  setTimeout(()=>{fsBtn.style.display='none';},650);
+},3000);
 
 rb();
 renderPreview();
